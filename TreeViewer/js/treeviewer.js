@@ -18,8 +18,12 @@ var TreeViewer = function (selector, data) {
     this.representation = "dynamic";
     this.data = data || null;
 
+    // pros and cons of cluster vs tree layouts
     this.cluster = d3.layout.cluster()
         .size([this.height, this.width-200]);
+
+    this.tree = d3.layout.tree()
+    	.size([this.height, this.width-200]);
 
     this.diagonal = d3.svg.diagonal()
         .projection(function(d) { 
@@ -43,7 +47,7 @@ var TreeViewer = function (selector, data) {
         if (this.representation == "dynamic") {
             this.tree_viewer = this.dynamic_tree(this.data);
         } else {
-            this.tree_viewer = this.static_tree(this.data);
+           this.tree_viewer = this.static_tree(this.data);
         };
     };
 }
@@ -61,6 +65,11 @@ TreeViewer.prototype.static_tree = function(root) {
     // build new cluster/dendrogram from updated data
     this.nodes = this.cluster.nodes(root),
     this.links = this.create_links(this.nodes);
+
+    this.nodes.forEach(function(node){
+    	console.log("static")
+    	console.log("X " + node.x + ", Y " + node.y)
+    });
       
     // Attach this new data to links and nodes.  
     this.link = this.svg.selectAll(".link")
@@ -73,7 +82,7 @@ TreeViewer.prototype.static_tree = function(root) {
     this.link.transition()
         .duration(2000)
         .attr("class", "link")
-        .attr("d", this.diagonal);
+        //.attr("d", this.diagonal);
                                 
     this.node.transition()
         .duration(2000)
@@ -96,6 +105,7 @@ TreeViewer.prototype.static_tree = function(root) {
         .attr("class", "node")
         .attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
 
+
    this.node.append("text")
             .attr("dx", function(d) { return d.children ? 6 : 6; })
             .attr("dy", 0)
@@ -111,12 +121,73 @@ TreeViewer.prototype.static_tree = function(root) {
     this.node_representation(this.node);
 };
 
+
+TreeViewer.prototype.initial_positions = function(nodes, y_pos, scale_factor){
+
+	function get_branch_len(branch_len, y_cor){
+		var hyp = Math.pow(branch_len, 2)
+		var y = Math.pow(y_cor, 2)
+		var x_cor = Math.sqrt(Math.abs(hyp - y))
+		return x_cor;
+	}
+
+	function positioning(node, x_pos, y_pos, orientation){
+		//orientation:
+		// +1 down
+		// -1 up
+		// 0 horizontal (right)
+		node.px = node.parent.px + x_pos;
+	    node.x = node.parent.x + x_pos;
+	    node.py = node.parent.py + (orientation)*y_pos;
+	  	node.y = node.parent.y + (orientation)*y_pos;
+	}
+
+    nodes.forEach(function(node){
+    	//add checks here for branch length scaling
+    	if (node.depth != 0){
+
+    		// calc branch length with scale factor and fixed y movement
+	    	var x_pos = get_branch_len(node.size*scale_factor, y_pos)
+
+	    	if (node.parent.children.length != 3){
+
+		    	if (node.parent.children.indexOf(node) == 0){
+		  			positioning(node, x_pos, y_pos, 1);
+		    	}else{
+		  			positioning(node, x_pos, y_pos, -1)
+		    	}
+		   	// only handle polytomies of size 3
+	    	}else if (node.parent.children.length == 3){
+
+	    		if (node.parent.children.indexOf(node) == 0){
+					positioning(node, x_pos, y_pos, 1);
+		  		}else if (node.parent.children.indexOf(node) == 1){
+		  			positioning(node, node.size*scale_factor, y_pos, 0)
+		    	}else{
+					positioning(node, x_pos, y_pos, -1)
+		    	}
+		    }
+	    }
+    	node.fixed =true;
+    });
+
+}
+
 TreeViewer.prototype.dynamic_tree = function(root) {
     
     // root contains data
-    
+
     var nodes = this.cluster.nodes(root);
     var links = this.create_links(nodes);
+
+    // initial root position
+
+	root.px = root.x = 0;
+	root.py = root.y = 280;
+	
+	// nodes, y pos increment, and scale factor
+	// make adjustable depending on tree size
+	this.initial_positions(nodes, 100, 100);
 
     this.force
         .nodes(nodes)
@@ -124,8 +195,6 @@ TreeViewer.prototype.dynamic_tree = function(root) {
         .start();
 
     var force = this.force;
-
-    // bugs in drag
 
     var drag = d3.behavior.drag()
         .on("dragstart", dragstart)
@@ -135,17 +204,18 @@ TreeViewer.prototype.dynamic_tree = function(root) {
     var link = this.svg.selectAll(".link")
         .data(this.force.links())
         .enter().append("path")
-        .attr("class", function(d) { return "link " + d.type; });
+        .attr("class", function(d) { return "link " + d.type; })
+        .attr("d", this.diagonal);
 
     var node = this.svg.selectAll(".node")
         .data(force.nodes())
         .enter().append("circle")
         .attr("r", 6)
-        .attr("x", function (d) { return d.x; })
-        .attr("y", function (d) { return d.y; })
+        .style("fill", function(d){ if (d.depth == 0) return '#990033'})
+        .attr("fixed", function(d) { if (d.name.substring(0,5) == "split") return d.fixed = true; else return false; })
         .attr("class", function(d) { return "node " + d.type; })
+        .attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; })
         .call(drag);
-        //.call(this.force.drag);
 
     var text = this.svg.append("g").selectAll("text")
         .data(force.nodes())
@@ -189,7 +259,6 @@ TreeViewer.prototype.dynamic_tree = function(root) {
         d.py += d3.event.dy;
         d.x += d3.event.dx;
         d.y += d3.event.dy; 
-        //d3.select(this).attr('transform', 'translate(' + d.x + ',' + d.y + ')');
         tick(); 
     }
 
@@ -197,6 +266,14 @@ TreeViewer.prototype.dynamic_tree = function(root) {
         d.fixed = true; 
         tick();
         force.resume();
+    }
+
+    function get_child_l(parent_node){
+    	return this.parent_node.children[0];
+    }
+
+    function get_child_r(parent_node){
+    	return this.parent_node.children[1];
     }
 
     this.force = force;
