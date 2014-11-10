@@ -30,9 +30,9 @@ var TreeViewer = function (selector, data) {
             return [d.y, d.x]; });
 
     this.force = d3.layout.force()
-        .charge(this.charge)
-        .linkDistance(this.link_distance)
-        .gravity(this.gravity)
+        //.charge(this.charge)
+        //.linkDistance(this.link_distance)
+       // .gravity(this.gravity)
         .size([this.height, this.width-200]);
 
     // create SVG canvas for vizualization 
@@ -179,7 +179,12 @@ TreeViewer.prototype.dynamic_tree = function(root) {
 
     var nodes = this.cluster.nodes(root);
     var links = this.create_links(nodes);
+    var scale_factor = 100;
 
+    links.forEach(function(link){
+    	console.log("Target: " + link.target.name)
+    	console.log("Source: " + link.source.name)
+    })
     // initial root position
 
 	root.px = root.x = 0;
@@ -187,9 +192,18 @@ TreeViewer.prototype.dynamic_tree = function(root) {
 	
 	// nodes, y pos increment, and scale factor
 	// make adjustable depending on tree size
-	this.initial_positions(nodes, 100, 100);
+	//this.initial_positions(nodes, 100, scale_factor);
 
     this.force
+    	.charge(-400)
+    	.gravity(0)
+        .linkDistance(function(d){
+	    	console.log(d.target.name)
+	    	if(d.depth == 0){
+	        }else{
+	        	return d.target.size*scale_factor;
+	        }
+        })
         .nodes(nodes)
         .links(links)
         .start();
@@ -212,7 +226,7 @@ TreeViewer.prototype.dynamic_tree = function(root) {
         .enter().append("circle")
         .attr("r", 6)
         .style("fill", function(d){ if (d.depth == 0) return '#990033'})
-        .attr("fixed", function(d) { if (d.name.substring(0,5) == "split") return d.fixed = true; else return false; })
+       // .attr("fixed", function(d) { if (d.name.substring(0,5) == "split") return d.fixed = true; else return false; })
         .attr("class", function(d) { return "node " + d.type; })
         .attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; })
         .call(drag);
@@ -238,7 +252,8 @@ TreeViewer.prototype.dynamic_tree = function(root) {
             var dx = d.target.x - d.source.x,
             dy = d.target.y - d.source.y,
             dr = Math.sqrt(dx * dx + dy * dy);
-            return "M" + d.source.x + "," + d.source.y + "L" + d.target.x + "," + d.target.y;
+            //return "M" + d.source.x + "," + d.source.y + "L" + d.target.x + "," + d.target.y;
+        	return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + d.target.x + "," + d.target.y;
         });
 
         node.attr("transform", function(d){
@@ -251,7 +266,7 @@ TreeViewer.prototype.dynamic_tree = function(root) {
     }
 
     function dragstart(d, i) {
-        force.stop() // stops the force auto positioning before you start dragging
+        //force.stop() // stops the force auto positioning before you start dragging
     }
 
     function dragmove(d, i) {
@@ -263,17 +278,9 @@ TreeViewer.prototype.dynamic_tree = function(root) {
     }
 
     function dragend(d, i) {
-        d.fixed = true; 
+       //	d.fixed = true; 
         tick();
         force.resume();
-    }
-
-    function get_child_l(parent_node){
-    	return this.parent_node.children[0];
-    }
-
-    function get_child_r(parent_node){
-    	return this.parent_node.children[1];
     }
 
     this.force = force;
@@ -283,6 +290,7 @@ TreeViewer.prototype.dynamic_tree = function(root) {
     this.link = link;
     this.node = node;
     this.text = text;
+    this.scale_factor = scale_factor;
 
 }
 
